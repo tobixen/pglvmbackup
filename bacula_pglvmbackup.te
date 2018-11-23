@@ -1,0 +1,91 @@
+module bacula_pglvmbackup 1.5;
+
+## TODO: This was created through audit2allow, no QA done.  One should probably look through and see if all those permissions are needed.
+## I'm uncertain how much of this is required to get pglvmbackup to work, and how much is triggered by a plain bacula/bareos client
+
+require {
+        type insmod_exec_t;
+        type ssh_exec_t;
+        type sysfs_t;
+        type lvm_metadata_t;
+        type fusefs_t;
+        type lvm_lock_t;
+        type cgroup_t;
+        type lvm_exec_t;
+        type fs_t;
+        type hugetlbfs_t;
+        type bacula_t;
+        type unlabeled_t;
+        type mount_var_run_t;
+        type kernel_t;
+        type sudo_exec_t;
+        type configfs_t;
+        type pstore_t;
+        type tmpfs_t;
+        type var_t;
+        type device_t;
+        type fixed_disk_device_t;
+        type lvm_control_t;
+        type lvm_t;
+        type mount_exec_t;
+        type bacula_tmp_t;
+        type lvm_var_run_t;
+        type postgresql_db_t;
+        class fifo_file { lock open read write };
+        class process { setrlimit setsched setfscreate };
+        class unix_stream_socket connectto;
+        class netlink_audit_socket { create nlmsg_relay read write };
+        class system ipc_info;
+        class chr_file { ioctl open read write };
+        class capability { audit_write ipc_lock sys_nice sys_rawio sys_resource sys_admin };
+        class file { append create execute execute_no_trans link rename unlink write };
+        class filesystem { getattr mount unmount };
+        class blk_file write;
+        class dir { add_name mounton remove_name write setattr };
+}
+
+#============= bacula_t ==============
+allow bacula_t bacula_tmp_t:dir mounton;
+allow bacula_t cgroup_t:filesystem getattr;
+allow bacula_t configfs_t:filesystem getattr;
+
+#!!!! WARNING: 'device_t' is a base type.
+allow bacula_t device_t:filesystem getattr;
+allow bacula_t fixed_disk_device_t:blk_file write;
+allow bacula_t fs_t:filesystem { mount unmount };
+allow bacula_t fusefs_t:filesystem getattr;
+allow bacula_t hugetlbfs_t:filesystem getattr;
+allow bacula_t insmod_exec_t:file { execute execute_no_trans };
+allow bacula_t kernel_t:process setsched;
+allow bacula_t kernel_t:system ipc_info;
+allow bacula_t lvm_control_t:chr_file { ioctl open read write };
+allow bacula_t lvm_exec_t:file { execute execute_no_trans };
+allow bacula_t lvm_lock_t:dir { add_name remove_name write };
+allow bacula_t lvm_lock_t:file { append create unlink };
+allow bacula_t lvm_metadata_t:dir { add_name remove_name write };
+allow bacula_t lvm_metadata_t:file { append create link rename unlink };
+
+#!!!! The file '/run/lvm/lvmetad.socket' is mislabeled on your system.  
+#!!!! Fix with $ restorecon -R -v /run/lvm/lvmetad.socket
+allow bacula_t lvm_t:unix_stream_socket connectto;
+allow bacula_t lvm_var_run_t:fifo_file { lock open read write };
+allow bacula_t mount_exec_t:file { execute execute_no_trans };
+allow bacula_t mount_var_run_t:dir write;
+allow bacula_t pstore_t:filesystem getattr;
+allow bacula_t self:capability { audit_write ipc_lock sys_nice sys_rawio sys_resource sys_admin };
+
+allow bacula_t self:netlink_audit_socket { create nlmsg_relay read write };
+allow bacula_t self:process { setrlimit setsched setfscreate };
+allow bacula_t ssh_exec_t:file { execute execute_no_trans };
+allow bacula_t sudo_exec_t:file { execute execute_no_trans };
+allow bacula_t sysfs_t:file write;
+allow bacula_t tmpfs_t:filesystem getattr;
+
+#!!!! WARNING: 'unlabeled_t' is a base type.
+allow bacula_t unlabeled_t:dir write;
+
+#!!!! WARNING: 'var_t' is a base type.
+allow bacula_t var_t:dir { add_name remove_name write };
+allow bacula_t var_t:file { append create rename unlink write };
+
+allow bacula_t postgresql_db_t:dir { setattr write };
