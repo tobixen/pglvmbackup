@@ -36,7 +36,9 @@ log() {
     echo "$(date +$TFMT) $@" >> $LOGFILE
 }
 
-## Read from the coproc pipe and yield soft errors if there is any unexpected output
+## Read from the coproc pipe and yield soft errors if there is any
+## unexpected output (see further below on why we need this complexity
+## on the coproc pipe)
 expect_nothing() {
     stoplines="$1"
     stoplines= [ -z "$stoplines" ] || 100
@@ -92,12 +94,17 @@ then
     rm $PROBLEMFILE.$$
 fi
 
-## pid file (ref https://tobru.ch/follow-up-bash-script-locking-with-flock/ - and ref that the customer wants to monitor weather the script is running)
+## pid file - it's "needed" because our customer wants monitoring on
+## weather the script is running or not, and alarms if the script is
+## hanging for too long.  I chose to use the boilerplate code on
+## https://tobru.ch/follow-up-bash-script-locking-with-flock/ to
+## create a proper PIDFILE.
 exec 200>$PIDFILE
 flock -n 200 || hard_error "unable to lock $PIDFILE - backup already running?"
 echo $$ 1>&200
  
-## Pipe stderr to the PROBLEMFILE.  If any stderr logging is captured there, the backup will be marked as non-successful.
+## Pipe stderr to the PROBLEMFILE.  If any stderr logging is captured
+## there, the backup will be marked as non-successful.
 exec 2>>$PROBLEMFILE
 
 
@@ -105,27 +112,32 @@ exec 2>>$PROBLEMFILE
 ## CREATING BACKUP SNAPSHOT
 ###########################
 
-## non-exclusive backups (ref the comment on the top of the file)
-## means we need to hold the psql connection until the snapshot has
-## been taken.  To do this with bash and psql, we need to start up
-## psql as a coprocesses.  coprocesses were introduced in bash v4.
+## non-exclusive backups is needed when doing backup from the slave.
+## To create a non-exclusive backup, it's needed to hold the psql
+## connection until the snapshot has been taken.  To do this with bash
+## and psql, we need to start up psql as a coprocesses.  coprocesses
+## were introduced in bash v4.
 coproc sudo -u postgres psql -t 2> >(perl -pe 'use POSIX qw(strftime); $date=strftime("'$TFMT'", localtime()); s/^NOTICE.*$// && chomp && next; s/^/$date stderr from psql: /' >> $PROBLEMFILE)
 
 ## Prepare postgres for backup
 echo "select pg_start_backup('${label}', false, false);" >&${COPROC[1]}
 
-## Pipe the output to the log.  Expect to see a slash.  Expect only one line of input
+## Pipe the output to the log.  Expect to see a slash.  Expect only
+## one line of input
 pipe_to_log 60 1 / pg_start_backup
 
 if [ -n "$MASTER_SERVER" ]
 then
-    ## roll the wal file (usually included when doing pg_start_backup, but has to be done from the server side)
+    ## roll the wal file (usually included when doing pg_start_backup,
+    ## but has to be done from the server side)
     log "running pg_switch_${WAL}() on master"
     echo "select pg_switch_${WAL}();" | sudo -u postgres ssh postgres@$MASTER_SERVER psql >> $LOGFILE || soft_error "couldn't run pg_switch_${WAL}"
 fi
-sync ## the sync should be very much redundant
+sync ## this sync should be very much redundant
 
-## create LVM snapshot.  The "File descriptor ... leaked on lvcreate invocation" is according to google a harmless warning that should be ignored
+## create LVM snapshot.  The "File descriptor ... leaked on lvcreate
+## invocation" is according to google a harmless warning that should
+## be ignored
 lvcreate --size $LVSIZE --snapshot --name $label $PGSQLDEVICE >> $LOGFILE 2> >(grep -Ev '^File descriptor.*leaked on lv.* invocation' 1>&2) || hard_error "failure while running lvcreate" 
 
 ## Tell postgresql that we're done taking the backup
