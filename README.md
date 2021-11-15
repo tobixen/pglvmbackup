@@ -1,12 +1,27 @@
 # pglvmbackup
 
+## TL;DR
+
+I would recommend to use this script if you either:
+
+* feel LVM snapshotting is the best way to make a backup
+* need a robust backup system optimized for monitoring
+
+Otherwise, go for pgBackRest.
+
 ## Alternatives
 
-There is pg_basebackup which is the standard tool, the general recommendation.  For us it didn't work out as our client explicitly wanted backups through LVM-snapshotting.
+There is pg_basebackup which is the standard tool, it used to be the general recommendation - though as of 2021, pgBaseBackup is the recommended tool by our most senior in-house PostgreSQL expert.
 
-There is also a tool at https://github.com/credativ/pg_backup_ctl which may take care of all aspects of the PITR backup (even including editing config files).  It also didn't fit very well with our needs, I believe it doesn't work when trying to take the base backup from the slave server, and I believe it's not terribly robust at handling unexpected errors and warnings.
+For us it didn't work out as our client explicitly wanted backups through LVM-snapshotting.  I found a a tool at https://github.com/credativ/pg_backup_ctl which may be based on LVM snapshotting and may take care of all aspects of the PITR backup (even including editing config files).  It also didn't fit very well with our needs, I believe it doesn't work when trying to take the base backup from the slave server, and I believe it's not terribly robust at handling unexpected errors and warnings.
 
-In any case, doing a backup is fairly simple, just some few lines of code ... run pg_start_backup(), create an lvm snapshot, run pg_stop_backup(), make a tarball of the lvm snapshot, delete the lvm snapshot ... how difficult can that be?  Five minutes of work?  Actually, I'm very much surprised to say that I ended up doing a lot of work before getting a workable backup script, I would not recommend anyone to "roll your own" on this one!
+Doing a backup is fairly simple, just some few lines of code ... run pg_start_backup(), create an lvm snapshot, run pg_stop_backup(), make a tarball of the lvm snapshot, delete the lvm snapshot ... how difficult can that be?  Five minutes of work?  Actually, I'm very much surprised to say that I ended up doing a lot of work before getting a workable backup script, I would not recommend anyone to "roll your own" on this one!
+
+## Pros and cons
+
+* According to one of my colleagues, the usage of LVM snapshotting may cause more IO overhead than just relying on pg_start/pg_end, so he's recommending against it.
+* This script is designed for robustness.  If anything goes wrong, there should be lots of alarms on our monitoring system.
+* Archiving of binlogs is not handled by this script and has to be taken care of outside of this script.
 
 ## Rationale
 
@@ -21,6 +36,8 @@ We needed a robust PITR backup system for a client.  Some of the requirements:
   * monitoring that the backup script doesn't get stuck (running for too long) - solved by introducing a pid-file that can be monitoried
   * monitoring that postgres doesn't get stuck in backup mode (solved through the check_pgactivity nrpe plugin and its backup_label_age service)
   * monitoring that the backup doesn't yield errors (all unexpected stderr logging ends up in a configurable $PROBLEMFILE which can be monitored)
+
+I have been told that the IO-overhead of LVM doing copy-on-write probably is bigger than the overhead of having PostgreSQL standing in backup mode while the backup is being taken.
 
 ## Installation, prerequisites and usage
 
